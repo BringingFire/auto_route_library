@@ -1173,8 +1173,16 @@ abstract class StackRouter extends RoutingController {
   /// Removes given [route] and any corresponding controllers
   ///
   /// finally calls [notifyAll] if notify is true
-  void removeRoute(RouteData route, {bool notify = true}) {
-    _removeRoute(route._match, notify: notify);
+  void removeRoute(
+    RouteData route, {
+    bool notify = true,
+    bool collapseDuplicates = true,
+  }) {
+    _removeRoute(
+      route._match,
+      notify: notify,
+      collapseDuplicates: collapseDuplicates,
+    );
   }
 
   /// Called when Page route is popped
@@ -1184,10 +1192,21 @@ abstract class StackRouter extends RoutingController {
     removeRoute(data);
   }
 
-  void _removeRoute(RouteMatch route, {bool notify = true}) {
+  void _removeRoute(
+    RouteMatch route, {
+    bool notify = true,
+    bool collapseDuplicates = false,
+  }) {
     var pageIndex = _pages.lastIndexWhere((p) => p.routeKey == route.key);
     if (pageIndex != -1) {
       _pages.removeAt(pageIndex);
+
+      if (collapseDuplicates && pageIndex > 0 && pageIndex < _pages.length) {
+        if (_pages[pageIndex - 1].routeData._match ==
+            _pages[pageIndex].routeData._match) {
+          _pages.removeAt(pageIndex - 1);
+        }
+      }
     }
 
     _updateSharedPathData(includeAncestors: true);
@@ -1219,9 +1238,16 @@ abstract class StackRouter extends RoutingController {
   /// if [onFailure] callback is provided, navigation errors will be passed to it
   /// otherwise they'll be thrown
   @optionalTypeArgs
-  Future<T?> push<T extends Object?>(PageRouteInfo route,
-      {OnNavigationFailure? onFailure}) async {
-    return _findStackScope(route)._push<T>(route, onFailure: onFailure);
+  Future<T?> push<T extends Object?>(
+    PageRouteInfo route, {
+    OnNavigationFailure? onFailure,
+    bool skipDuplicate = true,
+  }) async {
+    return _findStackScope(route)._push<T>(
+      route,
+      onFailure: onFailure,
+      skipDuplicate: skipDuplicate,
+    );
   }
 
   StackRouter _findStackScope(PageRouteInfo route) {
@@ -1270,13 +1296,14 @@ abstract class StackRouter extends RoutingController {
     OnNavigationFailure? onFailure,
     bool notify = true,
     ValueChanged<RouteMatch>? onMatch,
+    bool skipDuplicate = false,
   }) async {
     assert(
       !managedByWidget,
       'Pages stack can be managed by either the Widget (AutoRouter.declarative) or the (StackRouter)',
     );
-    var match = _matchOrReportFailure(route, onFailure);
-    if (match == null) {
+    final match = _matchOrReportFailure(route, onFailure);
+    if (match == null || (skipDuplicate && match == topMatch)) {
       return null;
     }
     onMatch?.call(match);
